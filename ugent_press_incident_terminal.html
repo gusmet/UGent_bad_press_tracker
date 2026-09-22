@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UGent Press Watchdog // VT-220 Terminal</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Retro Monospace Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --phosphor-green: #33ff33;
+      --phosphor-dim: #1f991f;
+      --phosphor-bright: #66ff66;
+      --phosphor-bg: #050d05;
+      --crt-glow: rgba(51, 255, 51, 0.35);
+      --scanline-opacity: 0.28;
+    }
+
+    body {
+      background-color: var(--phosphor-bg);
+      color: var(--phosphor-green);
+      font-family: 'Share Tech Mono', monospace;
+      text-shadow: 0 0 5px var(--crt-glow);
+      overflow-x: hidden;
+    }
+
+    .font-terminal-display {
+      font-family: 'VT323', monospace;
+    }
+
+    /* Scanline overlay */
+    .scanlines-overlay {
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.75) 50%
+      );
+      background-size: 100% 4px;
+      opacity: var(--scanline-opacity);
+    }
+
+    /* CRT Screen Curvature & Vignette shadow */
+    .crt-vignette {
+      background: radial-gradient(
+        circle at center,
+        rgba(30, 70, 30, 0) 55%,
+        rgba(0, 15, 0, 0.65) 85%,
+        rgba(0, 0, 0, 0.95) 100%
+      );
+    }
+
+    /* Subtle screen phosphor hum flicker */
+    @keyframes screenFlicker {
+      0% { opacity: 0.985; }
+      50% { opacity: 1; }
+      52% { opacity: 0.96; }
+      54% { opacity: 1; }
+      100% { opacity: 0.99; }
+    }
+
+    .screen-flicker {
+      animation: screenFlicker 0.12s infinite;
+    }
+
+    /* Classic Terminal Blinking Cursor */
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+
+    .cursor-blink {
+      animation: blink 1s infinite steps(1);
+    }
+
+    /* Custom retro scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #020602;
+      border-left: 1px solid var(--phosphor-dim);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--phosphor-dim);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--phosphor-green);
+    }
+
+    .retro-border {
+      border: 1px solid var(--phosphor-dim);
+      box-shadow: 0 0 8px rgba(51, 255, 51, 0.15), inset 0 0 8px rgba(51, 255, 51, 0.08);
+    }
+
+    .retro-border-bright {
+      border: 1px solid var(--phosphor-green);
+      box-shadow: 0 0 12px rgba(51, 255, 51, 0.3), inset 0 0 10px rgba(51, 255, 51, 0.15);
+    }
+
+    .glow-text {
+      text-shadow: 0 0 8px var(--phosphor-green), 0 0 15px rgba(51, 255, 51, 0.5);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-3 sm:p-6 relative select-none">
+  <!-- CRT Scanlines and Vignette visual FX -->
+  <div id="scanline-layer" class="scanlines-overlay fixed inset-0 pointer-events-none z-50"></div>
+  <div class="crt-vignette fixed inset-0 pointer-events-none z-40"></div>
+
+  <!-- Terminal Container Frame -->
+  <div class="relative z-30 max-w-6xl mx-auto w-full flex-1 flex flex-col screen-flicker">
+    
+    <!-- Top System Header Bar -->
+    <header class="retro-border bg-black/80 p-3 mb-4 rounded flex flex-col md:flex-row justify-between items-start md:items-center text-xs tracking-wider gap-2">
+      <div class="flex items-center gap-3">
+        <span class="inline-block w-2.5 h-2.5 bg-[#33ff33] rounded-full animate-ping"></span>
+        <span class="font-bold text-sm tracking-widest text-[#66ff66]">UGENT_REPUTATION_TELEMETRY // SYS_VER 4.2.0</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[#1f991f]">
+        <span>NODE: <strong class="text-[#33ff33]">GHENT-BE-CENTRAL</strong></span>
+        <span>DAEMON: <strong id="daemon-status" class="text-[#33ff33]">LISTENING (8h/14h/18h/22h)</strong></span>
+        <span>LAST_CHECK: <strong id="last-sync-time" class="text-[#33ff33]">SYNCHRONIZING...</strong></span>
+      </div>
+    </header>
+
+    <!-- Mode Notification Bar (Live vs Fallback indicator) -->
+    <div id="status-banner" class="mb-4 text-xs retro-border p-2 bg-[#0a1f0a]/60 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-[#66ff66]">[FEED STATUS]</span>
+        <span id="feed-source-label">CONNECTING TO ./data/status.json ...</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-toggle-sound" class="hover:bg-[#33ff33]/20 px-2 py-0.5 border border-[#1f991f] text-xs transition-colors">
+          AUDIO: <span id="sound-state">OFF</span>
+        </button>
+        <button id="btn-toggle-scanlines" class="hover:bg-[#33ff33]/20 px-2 py-0.5 border border-[#1f991f] text-xs transition-colors">
+          CRT: <span id="crt-state">MAX</span>
+        </button>
+        <button id="btn-refresh" class="hover:bg-[#33ff33]/20 px-2 py-0.5 border border-[#1f991f] text-xs transition-colors">
+          [FORCE POLL]
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN DASHBOARD METRICS: The Big Counter -->
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+      
+      <!-- Primary Counter Block -->
+      <section class="lg:col-span-8 retro-border-bright bg-black/90 p-5 sm:p-8 rounded flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute -right-8 -top-8 text-[#1f991f]/10 font-terminal-display text-9xl pointer-events-none select-none">
+          UGENT
+        </div>
+
+        <div class="flex justify-between items-center border-b border-[#1f991f] pb-3 mb-4">
+          <span class="text-xs uppercase tracking-widest text-[#1f991f] font-mono">
+            &gt; DAYS SINCE REPUTATIONAL OR GOVERNANCE CONTROVERSY
+          </span>
+          <span id="counter-badge" class="text-xs px-2 py-0.5 bg-[#33ff33]/10 border border-[#33ff33] text-[#66ff66]">
+            AUDIT ACTIVE
+          </span>
+        </div>
+
+        <!-- Giant Monospaced Digit Display -->
+        <div class="my-4 text-center">
+          <div id="counter-value" class="font-terminal-display text-7xl sm:text-9xl md:text-[11rem] leading-none text-[#66ff66] glow-text tracking-wider font-bold">
+            --
+          </div>
+          <div id="sub-counter-clock" class="text-xs sm:text-sm text-[#1f991f] mt-2 font-mono">
+            CALCULATING EXACT ELAPSED SYSTEM TIME: 00h 00m 00s
+          </div>
+        </div>
+
+        <!-- Streak Telemetry Footer -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[#1f991f] text-xs">
+          <div class="flex items-center justify-between p-2 bg-[#081508] border border-[#1f991f]">
+            <span class="text-[#1f991f]">RECORD STREAK:</span>
+            <span id="record-streak" class="font-bold text-[#66ff66] text-sm">-- DAYS</span>
+          </div>
+          <div class="flex items-center justify-between p-2 bg-[#081508] border border-[#1f991f]">
+            <span class="text-[#1f991f]">SEVERITY LEVEL:</span>
+            <span id="threat-level" class="font-bold text-[#66ff66] text-sm">NOMINAL</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Latest Incident Detail Pane -->
+      <section class="lg:col-span-4 retro-border bg-black/90 p-4 rounded flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-[#1f991f] pb-2 mb-3">
+            <span class="text-xs text-[#1f991f] tracking-wider">&gt; LATEST INCIDENT LOG</span>
+            <span class="text-[10px] px-1 bg-red-950 text-red-400 border border-red-800">ALERT_RECORDED</span>
+          </div>
+
+          <div class="space-y-2 text-xs">
+            <div>
+              <span class="text-[#1f991f] block text-[10px]">EVENT_TIMESTAMP:</span>
+              <span id="latest-incident-date" class="text-[#33ff33] font-bold">--</span>
+            </div>
+
+            <div>
+              <span class="text-[#1f991f] block text-[10px]">HEADLINE_TRANSCRIPT:</span>
+              <p id="latest-incident-title" class="text-[#66ff66] bg-[#091509] p-2 border border-[#1f991f] italic min-h-[60px] leading-relaxed">
+                Awaiting telemetry payload...
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-[#1f991f]">
+          <span class="text-[#1f991f] block text-[10px] mb-1">VERIFICATION_LINK:</span>
+          <a id="latest-incident-url" href="#" target="_blank" rel="noopener noreferrer" 
+             class="block text-center py-2 px-3 bg-[#33ff33]/10 hover:bg-[#33ff33]/30 border border-[#33ff33] text-xs font-bold text-[#66ff66] transition-all truncate">
+            [ACCESS NEWS DISPATCH &rarr;]
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <!-- Incident Archive: Retro dmesg / syslog table (Last 10 items) -->
+    <section class="retro-border bg-black/90 p-4 rounded mb-4">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#1f991f] pb-2 mb-3 gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-[#66ff66] font-bold text-sm font-terminal-display tracking-widest text-lg">/VAR/LOG/UGENT_INCIDENTS.LOG</span>
+          <span class="text-[10px] text-[#1f991f]">(ROLLING RING BUFFER: MAX 10 SLOTS)</span>
+        </div>
+        <div class="text-[11px] text-[#1f991f]">
+          FILTER: <span class="text-[#33ff33]">INSTITUTIONAL_CONTROVERSY</span>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto max-h-56 overflow-y-auto">
+        <table class="w-full text-left text-xs font-mono border-collapse">
+          <thead>
+            <tr class="border-b border-[#1f991f] text-[#1f991f] text-[11px]">
+              <th class="py-1 px-2">SYS_TIME</th>
+              <th class="py-1 px-2">SEVERITY</th>
+              <th class="py-1 px-2">INCIDENT HEADLINE SYNOPSIS</th>
+              <th class="py-1 px-2 text-right">DISPATCH</th>
+            </tr>
+          </thead>
+          <tbody id="incident-history-body">
+            <!-- Dynamically populated via JS -->
+            <tr>
+              <td colspan="4" class="py-4 text-center text-[#1f991f]">
+                POLLING HISTORICAL BUFFER...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Interactive Console Shell Section -->
+    <section class="retro-border bg-black/95 p-3 rounded text-xs font-mono mb-2">
+      <div id="console-output" class="max-h-28 overflow-y-auto space-y-1 mb-2 text-[#1f991f] text-[11px]">
+        <div>UGENT_WATCHDOG VT-220 SHELL INITIALIZED. Type <span class="text-[#66ff66] font-bold">'help'</span> for available commands.</div>
+      </div>
+      
+      <form id="terminal-form" class="flex items-center gap-2 border-t border-[#1f991f] pt-2">
+        <span class="text-[#66ff66] font-bold">ugent-watchdog@terminaal:~$</span>
+        <input 
+          id="terminal-input" 
+          type="text" 
+          class="flex-1 bg-transparent text-[#66ff66] outline-none border-none font-mono text-xs caret-[#66ff66]"
+          placeholder="type 'help', 'status', 'history', 'revert', 'mock'..." 
+          autocomplete="off" 
+          spellcheck="false"
+        />
+        <span class="cursor-blink text-[#66ff66] font-bold text-sm">█</span>
+      </form>
+    </section>
+
+    <!-- System Footer -->
+    <footer class="text-[10px] text-[#1f991f] flex flex-col sm:flex-row justify-between items-center py-2 px-1">
+      <span>AUTONOMOUS RSS INGESTION &amp; GEMINI FLASH AUDITING ENGINE</span>
+      <div class="flex gap-4 mt-1 sm:mt-0">
+        <button id="btn-copy-link" class="hover:text-[#66ff66] underline">[SHARE STATUS LINK]</button>
+        <span id="copy-confirm" class="text-[#66ff66] hidden">[COPIED]</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Notification Toast Container -->
+  <div id="terminal-toast" class="fixed bottom-6 right-6 z-50 bg-black retro-border-bright p-3 text-xs text-[#66ff66] hidden max-w-xs shadow-xl">
+    <div id="toast-content">&gt; NOTIFICATION</div>
+  </div>
+
+  <!-- Logic and Application Scripts -->
+  <script>
+    // Synthetic Audio Effects via Web Audio API (No external sound files required)
+    let audioContext = null;
+    let audioEnabled = false;
+
+    function initAudio() {
+      if (!audioContext) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        audioContext = new AudioCtx();
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+    }
+
+    function playBeep(frequency = 750, duration = 0.05, type = 'square') {
+      if (!audioEnabled || !audioContext) return;
+      try {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, audioContext.currentTime);
+        gain.gain.setValueAtTime(0.08, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + duration);
+      } catch (e) {
+        console.warn('Audio synthesis issue:', e);
+      }
+    }
+
+    function playKeyClick() {
+      playBeep(1200 + Math.random() * 400, 0.02, 'triangle');
+    }
+
+    function playAlertBeep() {
+      if (!audioEnabled) return;
+      playBeep(440, 0.1, 'sawtooth');
+      setTimeout(() => playBeep(330, 0.15, 'sawtooth'), 120);
+    }
+
+    // Fallback baseline mock data if running purely local (file://) or if ./data/status.json does not exist yet
+    const MOCK_DATA = {
+      last_incident_date: new Date(Date.now() - 3.5 * 24 * 60 * 60 * 1000).toISOString(),
+      last_incident_title: "Studentenprotest eist transparantie over investeringen en academische banden",
+      last_incident_url: "https://www.standaard.be",
+      longest_streak_days: 28,
+      history: [
+        {
+          date: new Date(Date.now() - 3.5 * 24 * 60 * 60 * 1000).toISOString(),
+          title: "Studentenprotest eist transparantie over investeringen en academische banden",
+          url: "https://www.standaard.be"
+        },
+        {
+          date: new Date(Date.now() - 17.2 * 24 * 60 * 60 * 1000).toISOString(),
+          title: "Verhitte discussies in raad van bestuur over begrotingstekort en besparingen",
+          url: "https://www.demorgen.be"
+        },
+        {
+          date: new Date(Date.now() - 34.0 * 24 * 60 * 60 * 1000).toISOString(),
+          title: "Onrust over huisvestingsprijzen en tekort aan studentenkamers in Gent",
+          url: "https://www.hln.be"
+        },
+        {
+          date: new Date(Date.now() - 62.1 * 24 * 60 * 60 * 1000).toISOString(),
+          title: "Controverse rond academische evaluatiecriteria leidt tot open brief personeel",
+          url: "https://www.nieuwsblad.be"
+        }
+      ]
+    };
+
+    let appState = {
+      data: null,
+      isMock: false,
+      intervalTimer: null
+    };
+
+    // Calculate elapsed time breakdown
+    function updateCounterClock() {
+      if (!appState.data || !appState.data.last_incident_date) return;
+
+      const now = new Date();
+      const incidentDate = new Date(appState.data.last_incident_date);
+      const diffMs = Math.max(0, now - incidentDate);
+
+      const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+      const counterElem = document.getElementById('counter-value');
+      const clockElem = document.getElementById('sub-counter-clock');
+      const badgeElem = document.getElementById('counter-badge');
+      const threatElem = document.getElementById('threat-level');
+
+      counterElem.textContent = String(totalDays);
+      clockElem.textContent = `EXACT UPTIME WITHOUT CONTROVERSY: ${hours}h ${minutes}m ${seconds}s`;
+
+      // Update badge and threat level depending on days
+      if (totalDays === 0) {
+        badgeElem.textContent = "CRITICAL: RECENT SCAN FAILURE";
+        badgeElem.className = "text-xs px-2 py-0.5 bg-red-950 border border-red-500 text-red-400";
+        threatElem.textContent = "HIGH TENSION";
+        threatElem.className = "font-bold text-red-400 text-sm";
+      } else if (totalDays < 7) {
+        badgeElem.textContent = "WARNING: HIGH REPUTATION VOLATILITY";
+        badgeElem.className = "text-xs px-2 py-0.5 bg-yellow-950 border border-yellow-500 text-yellow-400";
+        threatElem.textContent = "ELEVATED";
+        threatElem.className = "font-bold text-yellow-400 text-sm";
+      } else {
+        badgeElem.textContent = "STABLE OPERATING WINDOW";
+        badgeElem.className = "text-xs px-2 py-0.5 bg-[#33ff33]/10 border border-[#33ff33] text-[#66ff66]";
+        threatElem.textContent = "NOMINAL";
+        threatElem.className = "font-bold text-[#66ff66] text-sm";
+      }
+
+      // Keep record streak accurate: if current streak is higher than stored record, update it live
+      const storedRecord = appState.data.longest_streak_days || 0;
+      const effectiveRecord = Math.max(storedRecord, totalDays);
+      document.getElementById('record-streak').textContent = `${effectiveRecord} DAYS`;
+    }
+
+    // Format ISO string into terminal syslog style
+    function formatTerminalDate(isoString) {
+      if (!isoString) return "UNKNOWN_DATE";
+      try {
+        const d = new Date(isoString);
+        return d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+      } catch (e) {
+        return isoString;
+      }
+    }
+
+    // Render data payload to DOM
+    function renderApp(data, isMock = false) {
+      appState.data = data;
+      appState.isMock = isMock;
+
+      // Status indicator
+      const banner = document.getElementById('feed-source-label');
+      if (isMock) {
+        banner.innerHTML = `<span class="text-yellow-400">[FALLBACK DEMO BUFFER]</span> ./data/status.json not found locally. Showing mock incidents.`;
+      } else {
+        banner.innerHTML = `<span class="text-[#66ff66]">[ACTIVE INGESTION FEED]</span> Reading live state from ./data/status.json`;
+      }
+
+      document.getElementById('last-sync-time').textContent = new Date().toLocaleTimeString();
+
+      // Populate Latest Incident Pane
+      document.getElementById('latest-incident-date').textContent = formatTerminalDate(data.last_incident_date);
+      document.getElementById('latest-incident-title').textContent = data.last_incident_title || 'No logged summary available.';
+      
+      const linkElem = document.getElementById('latest-incident-url');
+      if (data.last_incident_url && data.last_incident_url !== '#') {
+        linkElem.href = data.last_incident_url;
+        linkElem.textContent = `[ACCESS WIRE DISPATCH: ${new URL(data.last_incident_url).hostname.replace('www.', '')} \u2192]`;
+      } else {
+        linkElem.href = '#';
+        linkElem.textContent = '[NO EXTERNAL WIRE ATTACHED]';
+      }
+
+      // Populate Incident History Table (last 10 items)
+      const tbody = document.getElementById('incident-history-body');
+      tbody.innerHTML = '';
+
+      const historyList = (data.history && data.history.length > 0) 
+        ? [...data.history].reverse().slice(0, 10) 
+        : [{ date: data.last_incident_date, title: data.last_incident_title, url: data.last_incident_url }];
+
+      historyList.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.className = "border-b border-[#1f991f]/30 hover:bg-[#33ff33]/5 transition-colors";
+
+        const dateStr = item.date ? item.date.substring(0, 10) : '2026-XX-XX';
+        const urlHost = item.url ? (() => {
+          try { return new URL(item.url).hostname.replace('www.', ''); } 
+          catch(e) { return 'SOURCE'; }
+        })() : 'SOURCE';
+
+        tr.innerHTML = `
+          <td class="py-2 px-2 text-[#1f991f] whitespace-nowrap font-mono">[${dateStr}]</td>
+          <td class="py-2 px-2 text-[#66ff66] font-bold text-[10px]">WARN_REP</td>
+          <td class="py-2 px-2 text-white/90 truncate max-w-xs md:max-w-md" title="${item.title || ''}">
+            ${item.title || 'Untitled Incident Report'}
+          </td>
+          <td class="py-2 px-2 text-right whitespace-nowrap">
+            <a href="${item.url || '#'}" target="_blank" rel="noopener noreferrer" 
+               class="text-[#33ff33] hover:underline hover:text-[#66ff66] text-[11px]">
+              [${urlHost}]
+            </a>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Start / Refresh Clock
+      if (appState.intervalTimer) clearInterval(appState.intervalTimer);
+      updateCounterClock();
+      appState.intervalTimer = setInterval(updateCounterClock, 1000);
+    }
+
+    // Ingest data from repository JSON
+    async function loadData() {
+      const banner = document.getElementById('feed-source-label');
+      banner.textContent = "POLLING ./data/status.json ...";
+      
+      try {
+        // Cache-busting query to ensure fresh fetch after GitHub action commit
+        const response = await fetch(`./data/status.json?t=${Date.now()}`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: Failed to read status file.`);
+        }
+        const jsonData = await response.json();
+        renderApp(jsonData, false);
+        logToConsole("Telemetry feed connected successfully: status.json loaded.");
+      } catch (err) {
+        console.warn("Could not fetch ./data/status.json, engaging fallback mock state:", err);
+        renderApp(MOCK_DATA, true);
+        logToConsole("WARNING: Local status.json unavailable. Fallback telemetry activated.");
+      }
+    }
+
+    // Terminal Log Print Helper
+    function logToConsole(text, isUser = false) {
+      const consoleBox = document.getElementById('console-output');
+      const div = document.createElement('div');
+      div.className = isUser ? "text-[#66ff66] font-bold" : "text-[#1f991f]";
+      div.textContent = (isUser ? "> " : "[SYS] ") + text;
+      consoleBox.appendChild(div);
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('terminal-toast');
+      const content = document.getElementById('toast-content');
+      content.textContent = message;
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3200);
+    }
+
+    // Command interpreter
+    function handleCommand(cmd) {
+      const sanitized = cmd.trim().toLowerCase();
+      logToConsole(cmd, true);
+
+      switch (sanitized) {
+        case 'help':
+          logToConsole("Available commands: status, history, latest, sound, crt, refresh, mock, clear, about");
+          break;
+        case 'status':
+          if (appState.data) {
+            logToConsole(`LAST INCIDENT: ${appState.data.last_incident_date}`);
+            logToConsole(`RECORD STREAK: ${appState.data.longest_streak_days} days`);
+            logToConsole(`BUFFER SIZE: ${(appState.data.history || []).length} items in ring`);
+          }
+          break;
+        case 'history':
+          if (appState.data && appState.data.history) {
+            appState.data.history.forEach((h, i) => {
+              logToConsole(`#${i+1} [${h.date.slice(0, 10)}] ${h.title}`);
+            });
+          } else {
+            logToConsole("No history recorded in current buffer.");
+          }
+          break;
+        case 'latest':
+          if (appState.data) {
+            logToConsole(`URL: ${appState.data.last_incident_url}`);
+          }
+          break;
+        case 'sound':
+        case 'audio':
+          toggleAudio();
+          break;
+        case 'crt':
+        case 'scanlines':
+          toggleScanlines();
+          break;
+        case 'refresh':
+        case 'poll':
+          loadData();
+          break;
+        case 'mock':
+          renderApp(MOCK_DATA, true);
+          logToConsole("Simulated mock environment forced.");
+          break;
+        case 'clear':
+          document.getElementById('console-output').innerHTML = '';
+          break;
+        case 'about':
+          logToConsole("UGent Press Tracker // Autonomous monitoring daemon with Gemini 2.5 Flash classification.");
+          break;
+        default:
+          if (sanitized.length > 0) {
+            logToConsole(`Command not found: '${sanitized}'. Type 'help' for directory.`);
+          }
+          break;
+      }
+    }
+
+    function toggleAudio() {
+      initAudio();
+      audioEnabled = !audioEnabled;
+      document.getElementById('sound-state').textContent = audioEnabled ? 'ON' : 'OFF';
+      logToConsole(`Audio synthesizer: ${audioEnabled ? 'ENABLED' : 'DISABLED'}`);
+      if (audioEnabled) playBeep(880, 0.08);
+    }
+
+    let scanlineState = 2; // 2: Max, 1: Low, 0: Off
+    function toggleScanlines() {
+      const scanlayer = document.getElementById('scanline-layer');
+      const stateLabel = document.getElementById('crt-state');
+
+      scanlineState = (scanlineState + 1) % 3;
+      if (scanlineState === 2) {
+        scanlayer.style.opacity = "0.28";
+        stateLabel.textContent = "MAX";
+      } else if (scanlineState === 1) {
+        scanlayer.style.opacity = "0.12";
+        stateLabel.textContent = "LOW";
+      } else {
+        scanlayer.style.opacity = "0.0";
+        stateLabel.textContent = "OFF";
+      }
+      logToConsole(`CRT Raster lines set to: ${stateLabel.textContent}`);
+    }
+
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', () => {
+      // Audio trigger on first user action
+      document.body.addEventListener('click', () => {
+        if (!audioContext) initAudio();
+      }, { once: true });
+
+      // Buttons
+      document.getElementById('btn-toggle-sound').addEventListener('click', () => {
+        toggleAudio();
+      });
+
+      document.getElementById('btn-toggle-scanlines').addEventListener('click', () => {
+        toggleScanlines();
+      });
+
+      document.getElementById('btn-refresh').addEventListener('click', () => {
+        playBeep(900, 0.05);
+        loadData();
+      });
+
+      // Terminal Form
+      const termForm = document.getElementById('terminal-form');
+      const termInput = document.getElementById('terminal-input');
+      termForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const val = termInput.value;
+        if (val) {
+          playKeyClick();
+          handleCommand(val);
+          termInput.value = '';
+        }
+      });
+
+      termInput.addEventListener('keydown', () => {
+        playKeyClick();
+      });
+
+      // Copy Status Link (execCommand as per instructions)
+      document.getElementById('btn-copy-link').addEventListener('click', () => {
+        const dummy = document.createElement('input');
+        dummy.value = window.location.href;
+        document.body.appendChild(dummy);
+        dummy.select();
+        try {
+          document.execCommand('copy');
+          const confirm = document.getElementById('copy-confirm');
+          confirm.classList.remove('hidden');
+          showToast('> URL COPIED TO SYSTEM CLIPBOARD');
+          playBeep(1100, 0.05);
+          setTimeout(() => confirm.classList.add('hidden'), 2000);
+        } catch (err) {
+          console.error('Clipboard copy failed:', err);
+        }
+        document.body.removeChild(dummy);
+      });
+
+      // Initial Data Ingestion
+      loadData();
+    });
+  </script>
+</body>
+</html>
