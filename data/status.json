@@ -1,10 +1,15 @@
 {
-  "last_incident_date": "2026-09-01T10:00:00Z",
-  "last_incident_title": "Baseline initialisation",
-  "last_incident_url": "https://ugent.be",
-  "longest_streak_days": 0,
-  "history": [],
-  "processed_ids": [
+  "last_incident_date": "2026-09-18T09:30:00Z",
+  "last_incident_title": "Actievoerders jouwen rector De Sutter uit bij opening academiejaar UGent: \"Cofnas moet ontslagen worden\"",
+  "last_incident_url": "https://www.vrt.be/vrtnws/nl/2026/09/18/betogers-start-academiejaar-ugent-universiteit-petra-de-sutter-u/",
+  "longest_streak_days": 4,
+  "history": [
+    {
+      "date": "2026-09-18T09:30:00Z",
+      "title": "Actievoerders jouwen rector De Sutter uit bij opening academiejaar UGent: \"Cofnas moet ontslagen worden\"",
+      "url": "https://www.vrt.be/vrtnws/nl/2026/09/18/betogers-start-academiejaar-ugent-universiteit-petra-de-sutter-u/"
+    }
+  ],
     "CBMipgFBVV95cUxNdFV4emppcm5KbXh5Yk1DUzhOVi1xZVVLZVpxbkhsUTNsMzVLVExyNWRmR1VCbExCOTBGeHVOWl9ndjIzckVvQjBHR25fMm5XV1kzVnZhLU00YUdRekVDQlo3VFVqQkxvLUN2QXU3UmJTY1U4MXNNZlBBMVhRdTIxNDMzMkd4X0EzLWoxWHp6S1V4NDBBYnJzMy0wbWRUd0pnNnNERjdn",
     "CBMitgFBVV95cUxNOEdiWkFMc0ZoY19oY0Vja0lRR2NRdzNmQ1pVOFV2MDd6Rk9fNTduXzBiN0xoYTdwemE2aFJIem9uM01nZ2RoODhpRWEzNGRCVHV3RHo5QWFjcVFNUEN5SjhvajVUREdGZHU3djRkalNQNHJHeWllRGI1T1RqM19LZWg1NTNad3dhS19SaXlla1lpcDA5dTh0bDh4Unl0NmdCUXpXTVBWUnhQM24wNDAxM0pBMmc3QQ",
     "CBMihwJBVV95cUxPWExfVEZnMFZ6Q2hhQmpTRU9ObXpaZ1hVbEptOUhXZ1BrRjBIMmZzWDlfNVhRVGY3aGxmSENyM3kxaUcwYjRmaFhaZzZ4WWlUWUpxR1lfUWdyeHplQlRkb29CUEVHS0xLS25UV0xHT1M2T0FGNExVbmhIVzFZWTVhZWlHUUhqQmswVUNXX0tXREdkUVhPQjY3UTkyUnVKQzFVWGNTLVZSc1FVcFhOZmJoZzNYUHpzaFNWSlVIelFGLTVDVHRKUm00Q3JSdDBMalNMTFNxX3llUUZUUlJvdzNwZTV1VktCQ3FGRFJyLXZmRGdWMU9NaHhETHRRb01BcWlSeWFmNDNDTQ",
