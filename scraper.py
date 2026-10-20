@@ -10,7 +10,7 @@ from google.genai import types
 
 DATA_FILE = "data/status.json"
 # Added negative keywords to reduce false positives before hitting the LLM
-RSS_QUERY = '"Universiteit Gent" OR "UGent" when:1d -onderzoek -studie'
+RSS_QUERY = '"Universiteit Gent" OR "UGent" when:7d'
 RSS_URL = f"https://news.google.com/rss/search?q={urllib.parse.quote(RSS_QUERY)}&hl=nl&gl=BE&ceid=BE:nl"
 
 def load_data():
