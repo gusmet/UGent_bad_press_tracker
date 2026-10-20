@@ -42,7 +42,7 @@ def evaluate_article(client, title, summary):
     {{"is_bad_press": boolean, "confidence": float, "reason": "short explanation"}}
     """
     try:
-       response = client.models.generate_content(
+        response = client.models.generate_content(
             model="gemini-3.8-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -53,7 +53,7 @@ def evaluate_article(client, title, summary):
     except Exception as e:
         print(f"Classification error for '{title}': {e}", file=sys.stderr)
         return {"is_bad_press": False, "confidence": 0.0, "reason": "API Error"}
-
+        
 def main():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
