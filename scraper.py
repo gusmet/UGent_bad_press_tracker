@@ -42,8 +42,8 @@ def evaluate_article(client, title, summary):
     {{"is_bad_press": boolean, "confidence": float, "reason": "short explanation"}}
     """
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
+       response = client.models.generate_content(
+            model="gemini-3.8-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json"
