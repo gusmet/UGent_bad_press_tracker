@@ -22,12 +22,17 @@ def load_data():
             "processed_ids": []
         }
     with open(DATA_FILE, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError as err:
-            print(f"FATAL: data/status.json contains corrupt JSON syntax: {err}", file=sys.stderr)
-            print("Please fix trailing commas or unescaped quotes in status.json.", file=sys.stderr)
-            sys.exit(1)
+        raw_text = f.read()
+
+    # Self-healing: Strip illegal trailing commas before ] or }
+    cleaned_text = re.sub(r',\s*([\]}])', r'\1', raw_text)
+
+    try:
+        return json.loads(cleaned_text)
+    except json.JSONDecodeError as err:
+        print(f"FATAL: Could not parse data/status.json even after cleaning: {err}", file=sys.stderr)
+        print(f"Error occurred at line {err.lineno}, column {err.colno} (char {err.pos})", file=sys.stderr)
+        sys.exit(1)
 
 def save_data(data):
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
