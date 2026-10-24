@@ -7,6 +7,7 @@ import feedparser
 import urllib.parse
 from google import genai
 from google.genai import types
+import re
 
 DATA_FILE = "data/status.json"
 # Added negative keywords to reduce false positives before hitting the LLM
