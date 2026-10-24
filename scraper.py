@@ -15,9 +15,19 @@ RSS_URL = f"https://news.google.com/rss/search?q={urllib.parse.quote(RSS_QUERY)}
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        return {"last_incident_date": datetime.now(timezone.utc).isoformat(), "processed_ids": []}
+        return {
+            "last_incident_date": datetime.now(timezone.utc).isoformat(),
+            "longest_streak_days": 0,
+            "history": [],
+            "processed_ids": []
+        }
     with open(DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except json.JSONDecodeError as err:
+            print(f"FATAL: data/status.json contains corrupt JSON syntax: {err}", file=sys.stderr)
+            print("Please fix trailing commas or unescaped quotes in status.json.", file=sys.stderr)
+            sys.exit(1)
 
 def save_data(data):
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
