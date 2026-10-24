@@ -2,7 +2,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import feedparser
 import urllib.parse
 from google import genai
@@ -25,12 +25,20 @@ def save_data(data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 def evaluate_article(client, title, summary, max_retries=3):
+    now = datetime.now(timezone.utc)
+    current_date_str = now.strftime("%Y-%m-%d")
+    current_month_str = now.strftime("%B %Y")
     prompt = f"""
     You are an objective auditor assessing media reporting about Ghent University (UGent).
+    Today's date is {current_date_str} ({current_month_str}).
+
     Determine whether this article represents institutional bad press, governance crises, administrative scandal, 
     student misconduct, or controversies directly damaging UGent's reputation.
 
     Rules:
+    - You must ONLY evaluate current, breaking events happening around {current_month_str}.
+    - Retrospectives, nostalgia pieces, old exam blunders, or historic controversies from past years are NOT bad press.
+    - If the article describes an event that took place years ago, mark is_bad_press: false.
     - Academic research on negative topics is NOT bad press.
     - Professors acting as external commentators is NOT bad press.
     - Student sports results or standard announcements are NOT bad press.
@@ -63,8 +71,37 @@ def evaluate_article(client, title, summary, max_retries=3):
                 print(f"Non-retryable classification error for '{title}': {e}", file=sys.stderr)
                 return None
 
-    print(f"Exhausted all retries for '{title}'. Skipping for this run.", file=sys.stderr)
-    return None
+        print(f"Exhausted all retries for '{title}'. Skipping for this run.", file=sys.stderr)
+        return None
+    
+    def is_recent_article(entry, max_days=3):
+    """
+    Validates whether an article was genuinely published in the last 72 hours.
+    Rejects archive re-surfacings from outlets like HLN, De Morgen, and VRT.
+    """
+    # 1. Inspect RSS publication timestamp
+    pub_tuple = getattr(entry, "published_parsed", None)
+    if pub_tuple:
+        try:
+            pub_dt = datetime.fromtimestamp(time.mktime(pub_tuple), tz=timezone.utc)
+            article_age = datetime.now(timezone.utc) - pub_dt
+            
+            # If the article is older than 3 days, immediately drop it
+            if article_age > timedelta(days=max_days):
+                print(f"[ARCHIVE BLOCKED] Dropping old article: '{entry.title}' (Published: {pub_dt.strftime('%Y-%m-%d')})")
+                return False
+        except Exception as e:
+            print(f"Error parsing date for {entry.title}: {e}")
+
+    # 2. Check for explicit past year indicators in title or summary (e.g. 2018, 2019, 2020)
+    text_corpus = f"{entry.title} {getattr(entry, 'summary', '')}".lower()
+    for past_year in range(2015, 2026):
+        # Look for explicit historical markers like "in 2019", "van 2019", "(2019)"
+        if f"in {past_year}" in text_corpus or f"van {past_year}" in text_corpus or f"({past_year})" in text_corpus:
+            print(f"[ARCHIVE BLOCKED] Dropping retrospective mentioning {past_year}: '{entry.title}'")
+            return False
+
+    return True
         
 def main():
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -79,6 +116,11 @@ def main():
     for entry in feed.entries:
         entry_id = getattr(entry, "id", entry.link)
         if entry_id in data.get("processed_ids", []):
+            continue
+
+        # Immediately drop old or re-surfaced archive stories
+        if not is_recent_article(entry):
+            data.setdefault("processed_ids", []).append(entry_id)
             continue
 
         title = entry.title
