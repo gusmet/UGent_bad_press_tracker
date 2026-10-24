@@ -44,7 +44,12 @@ def evaluate_article(client, title, summary, max_retries=3):
 
     Determine whether this article represents institutional bad press, governance crises, administrative scandal, 
     student misconduct, or controversies directly damaging UGent's reputation.
-
+    SOURCE & CREDIBILITY RULES:
+    - The report MUST originate from professional, established journalistic press (e.g. recognized newspapers, public broadcasters, mainstream news magazines, or accredited regional press).
+    - Automatically REJECT (is_bad_press: false) any satire, parody, joke columns, or humor sites.
+    - Automatically REJECT (is_bad_press: false) self-published opinion blogs, anonymous leak portals, or unverified student forum posts.
+    - Disregard satirical framing even if the headline mimics real investigative reporting.
+    
     Rules:
     - You must ONLY evaluate current, breaking events happening around {current_month_str}.
     - Retrospectives, nostalgia pieces, old exam blunders, or historic controversies from past years are NOT bad press.
@@ -52,6 +57,7 @@ def evaluate_article(client, title, summary, max_retries=3):
     - Academic research on negative topics is NOT bad press.
     - Professors acting as external commentators is NOT bad press.
     - Student sports results or standard announcements are NOT bad press.
+    - If the article is merely continuing coverage of a controversy that broke earlier this week without any new information (e.g. follow-up reporting on the same professor or event), mark is_bad_press: false to prevent resetting the counter multiple times for the same event.
 
     Headline: {title}
     Snippet: {summary}
