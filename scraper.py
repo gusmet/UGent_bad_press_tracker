@@ -74,7 +74,7 @@ def evaluate_article(client, title, summary, max_retries=3):
         print(f"Exhausted all retries for '{title}'. Skipping for this run.", file=sys.stderr)
         return None
     
-    def is_recent_article(entry, max_days=3):
+def is_recent_article(entry, max_days=3):
     """
     Validates whether an article was genuinely published in the last 72 hours.
     Rejects archive re-surfacings from outlets like HLN, De Morgen, and VRT.
