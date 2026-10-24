@@ -130,24 +130,15 @@
     async function loadStatus() {
       try {
         const res = await fetch(DATA_PATH, { cache: 'no-store' });
-        if (!res.ok) throw new Error('Data endpoint unavailable');
+        if (!res.ok) throw new Error(`HTTP ${res.status}: Data file not reachable`);
         const data = await res.json();
         render(data);
       } catch (err) {
-        console.warn('Network fetch failed, rendering fallback baseline:', err);
-        render({
-          last_incident_date: new Date(Date.now() - 432000000).toISOString(),
-          last_incident_title: "Actievoerders bezetten rectoraat UGent tijdens academiejaar-opening",
-          last_incident_url: "https://www.ugent.be",
-          longest_streak_days: 14,
-          history: [
-            {
-              date: new Date(Date.now() - 432000000).toISOString(),
-              title: "Actievoerders bezetten rectoraat UGent tijdens academiejaar-opening",
-              url: "https://www.ugent.be"
-            }
-          ]
-        });
+        console.error('Fatal status load error:', err);
+        document.getElementById('day-counter').textContent = "ERR";
+        document.getElementById('current-status').textContent = "DATA CORRUPTED / OFFLINE";
+        document.getElementById('incident-title').textContent = "Could not parse data/status.json. Check browser console (F12) for syntax errors.";
+        document.getElementById('history-table').innerHTML = '<tr><td colspan="3" class="py-3 text-center text-red-400">TELEMETRY_LINK_BROKEN</td></tr>';
       }
     }
 
