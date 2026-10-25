@@ -13,7 +13,7 @@ import re
 DATA_FILE = "data/status.json"
 # Added negative keywords to reduce false positives before hitting the LLM
 RSS_QUERY = '"Universiteit Gent" OR "UGent" when:7d'
-RSS_FEED_URL = 'https://news.google.com/rss/search?q="Universiteit+Gent"+OR+"UGent"&hl=nl-BE&gl=BE&ceid=BE:nl&scoring=n'
+RSS_URL = 'https://news.google.com/rss/search?q="Universiteit+Gent"+OR+"UGent"&hl=nl-BE&gl=BE&ceid=BE:nl&scoring=n'
 
 def load_data():
     if not os.path.exists(DATA_FILE):
