@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import time
+import calendar
 from datetime import datetime, timezone, timedelta
 import feedparser
 import urllib.parse
@@ -12,7 +13,7 @@ import re
 DATA_FILE = "data/status.json"
 # Added negative keywords to reduce false positives before hitting the LLM
 RSS_QUERY = '"Universiteit Gent" OR "UGent" when:7d'
-RSS_URL = f"https://news.google.com/rss/search?q={urllib.parse.quote(RSS_QUERY)}&hl=nl&gl=BE&ceid=BE:nl"
+RSS_FEED_URL = 'https://news.google.com/rss/search?q="Universiteit+Gent"+OR+"UGent"&hl=nl-BE&gl=BE&ceid=BE:nl&scoring=n'
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -99,28 +100,42 @@ def evaluate_article(client, title, summary, max_retries=3):
 def is_recent_article(entry, max_days=3):
     """
     Validates whether an article was genuinely published in the last 72 hours.
-    Rejects archive re-surfacings from outlets like HLN, De Morgen, and VRT.
+    Rejects archive resurfacings, old re-indexes, and retrospectives.
     """
-    # 1. Inspect RSS publication timestamp
+    # 1. Inspect RSS publication timestamp using UTC conversion
     pub_tuple = getattr(entry, "published_parsed", None)
     if pub_tuple:
         try:
-            pub_dt = datetime.fromtimestamp(time.mktime(pub_tuple), tz=timezone.utc)
+            # calendar.timegm converts a UTC struct_time tuple cleanly without local runner timezone skews
+            pub_dt = datetime.fromtimestamp(calendar.timegm(pub_tuple), tz=timezone.utc)
             article_age = datetime.now(timezone.utc) - pub_dt
-            
-            # If the article is older than 3 days, immediately drop it
+
+            # If the article is older than max_days, immediately discard
             if article_age > timedelta(days=max_days):
                 print(f"[ARCHIVE BLOCKED] Dropping old article: '{entry.title}' (Published: {pub_dt.strftime('%Y-%m-%d')})")
                 return False
         except Exception as e:
-            print(f"Error parsing date for {entry.title}: {e}")
+            print(f"Error parsing date for {getattr(entry, 'title', 'unknown')}: {e}")
 
-    # 2. Check for explicit past year indicators in title or summary (e.g. 2018, 2019, 2020)
-    text_corpus = f"{entry.title} {getattr(entry, 'summary', '')}".lower()
-    for past_year in range(2015, 2026):
-        # Look for explicit historical markers like "in 2019", "van 2019", "(2019)"
-        if f"in {past_year}" in text_corpus or f"van {past_year}" in text_corpus or f"({past_year})" in text_corpus:
-            print(f"[ARCHIVE BLOCKED] Dropping retrospective mentioning {past_year}: '{entry.title}'")
+    # 2. Check for past calendar year digits anywhere in title or summary
+    # Matches any standalone past year between 2010 and 2025 (e.g. '2020', 'in 2020', '(2020)')
+    text_corpus = f"{getattr(entry, 'title', '')} {getattr(entry, 'summary', '')}"
+    past_year_match = re.search(r'\b(201[0-9]|202[0-5])\b', text_corpus)
+    if past_year_match:
+        print(f"[ARCHIVE BLOCKED] Dropping retrospective mentioning {past_year_match.group(0)}: '{entry.title}'")
+        return False
+
+    # 3. Check for well-known viral archive keywords that lack dates in the snippet
+    lower_corpus = text_corpus.lower()
+    archive_markers = [
+        "zatte nonkels",
+        "nachtelijke livestream",
+        "gemakkelijkste meerkeuze-examen",
+        "optie a",
+    ]
+    for marker in archive_markers:
+        if marker in lower_corpus:
+            print(f"[ARCHIVE BLOCKED] Dropping notorious past scandal marker '{marker}': '{entry.title}'")
             return False
 
     return True
