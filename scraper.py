@@ -82,7 +82,19 @@ def evaluate_article(client, title, summary, max_retries=3):
                     response_mime_type="application/json"
                 ),
             )
-            return json.loads(response.text)
+            parsed = json.loads(response.text)
+
+            # If Gemini wrapped the JSON object inside a single-element list, unwrap it
+            if isinstance(parsed, list):
+                parsed = parsed[0] if len(parsed) > 0 else {}
+    
+            # Guarantee a dictionary is returned so main() never crashes on .get()
+            if not isinstance(parsed, dict):
+                print(f"Unexpected JSON structure for '{title}': {type(parsed)}", file=sys.stderr)
+                return None
+    
+            return parsed
+            
         except Exception as e:
             err_msg = str(e)
             # If Google sheds load (503) or rate limits (429), pause and retry
